@@ -1,0 +1,13 @@
+@if(this.flightService.detailsOfFlightSignal())
+{
+
+    <div class="absolute bg-gray-200">
+        <p>Flight details</p>
+        <p>Callsign: {{this.flightService.detailsOfFlightSignal()?.callsign}}</p>
+        <p>Orgin: {{this.flightService.detailsOfFlightSignal()?.orgin_country}}</p>
+        <p>Velocity: {{this.flightService.detailsOfFlightSignal()?.velocity}} m/s</p>
+    </div>
+}
+@else {
+    <div></div>
+}

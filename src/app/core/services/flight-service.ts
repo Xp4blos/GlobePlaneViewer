@@ -39,6 +39,7 @@ export class FlightService {
 
   flightFiltersSignal = signal<FlightsFilters>(this.defaulatFilters);
   followedFlightSignal = signal<string | null>(null);
+  public detailsOfFlightSignal = signal<Flight | null>(null)
   $globalFlightsSubject = new BehaviorSubject<GlobalFlightData | null>(null);
 
   getAllFlights():void{
@@ -72,6 +73,12 @@ export class FlightService {
     )
   }
 
-
+  //not finished
+getFlightByIcao(icao:string){
+  this.http.get(`https://opensky-network.org/api/states/all?icao24=${icao}`).subscribe((response)=>{
+    console.log(response);
+    
+  })
+}
 
 }

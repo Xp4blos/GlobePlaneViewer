@@ -1,5 +1,12 @@
-<p class="bg-red-50">Flight Visualizer</p>
-<p>Last update {{lastUpdateTime | date:'MMM d, y, h:mm:ss a'}}</p>
+
+<section>
+  <p class="bg-red-50">Flight Visualizer</p>
+  <p class="cursor-pointer bg-blue-400 m-5 text-white p-1 rounded-xl shadow-lg"  (click)="saveToStorage()">Save aircrafts to local storage</p>
+  <p class="cursor-pointer bg-blue-400 m-5 text-white p-1 rounded-xl shadow-lg" (click)="loadFromStorage()">Load data from local storage</p>
+  <p class="cursor-pointer bg-blue-400 m-5 text-white p-1 rounded-xl shadow-lg" (click)="clearFromStorage()">Clear data from local storage</p>
+  <p>Last update {{lastUpdateTime | date:'MMM d, y, h:mm:ss a'}}</p>
+</section>
+<app-flight-details></app-flight-details>
 <div>
-  <div #canvas id="canvas"></div>
+  <div #canvas id="canvas" (click)="onMouseClick($event)"></div>
 </div>

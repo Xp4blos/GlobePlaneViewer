@@ -1,19 +1,35 @@
-import { Injectable } from "@angular/core";
+import { inject, Injectable } from "@angular/core";
 import * as THREE from "three";
-import { OrbitControls } from "three/examples/jsm/Addons.js";
-import { Flight } from "./flight-service";
+import { EffectComposer, OrbitControls, OutlinePass, RenderPass } from "three/examples/jsm/Addons.js";
+import { Flight, FlightService, GlobalFlightData } from "./flight-service";
 import { degToRad } from "three/src/math/MathUtils.js";
+import { map } from "rxjs";
 @Injectable({
   providedIn: "root",
 })
 export class ThreeService {
-
+flightService = inject(FlightService)
 
   private renderer !: THREE.WebGLRenderer;
   private scene !: THREE.Scene;
   private camera !: THREE.PerspectiveCamera;
   private orbitControls!: OrbitControls;
   private earth!: THREE.Mesh;
+  private clouds !: THREE.Mesh
+
+  //Raycaster elements
+  private raycaster !: THREE.Raycaster;
+  private clickedVector !: THREE.Vector2;
+
+  //Post processing effect composer
+  private composer!: EffectComposer
+  private outlinePass !: OutlinePass
+
+
+aircraftsMap = new Map<string, THREE.Group>
+//Map o(1) - item acces time - Hashing and adressing - direct jump to memory
+// airctaftsMap.has(id) - checking if contains
+// aircraftsMap.get(id) - gets object with id
 
 threeInit( canvas: HTMLCanvasElement): void {
     this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -43,20 +59,33 @@ threeInit( canvas: HTMLCanvasElement): void {
     //this.orbitControls.maxPolarAngle = (Math.PI / 3) * 2;
     this.orbitControls.dampingFactor = 0.08;
     this.orbitControls.enableDamping = true;
-
-
+    this.orbitControls.enablePan = false;
+    this.orbitControls.rotateSpeed = 0.3;
+    this.orbitControls.zoomSpeed = 0.6;
+    this.orbitControls.dampingFactor = 0.15
+    this.scene.background = new THREE.Color(0xffffff)
     this.renderer.setClearColor(0x171717);
 
 
     this.camera.position.set(8, 6, 8);
 
     this.orbitControls.update();
+//raycaster configuration
+this.raycaster = new THREE.Raycaster()
+//composer and post processing configuration
+const windowVector = new THREE.Vector2(canvas.clientWidth, canvas.clientHeight);
+this.outlinePass = new OutlinePass(windowVector,this.scene,this.camera)
+const renderPass = new RenderPass(this.scene,this.camera)
+this.composer = new EffectComposer(this.renderer)
+
+
+//Most important line in composer - we are passing renderer pass. 
+this.composer.addPass(renderPass)
+this.composer.addPass(this.outlinePass)
+
 }
 
-aircraftsMap = new Map<string, THREE.Group>
-//Map o(1) - item acces time - Hashing and adressing - direct jump to memory
-// airctaftsMap.has(id) - checking if contains
-// aircraftsMap.get(id) - gets object with id
+
 
 updateScene(newFlights : Flight[]){
 const activeIds = new Set(newFlights.map(flight => flight.icao24))
@@ -77,11 +106,15 @@ const newPosition = this.calcVector3(flight.latitude,flight.longitude,5.05);
 if(this.aircraftsMap.has(flight.icao24)){
 const mesh = this.aircraftsMap.get(flight.icao24)
 if(mesh){
+  //Updating active plane position
   mesh.position.copy(newPosition);
   this.orientPlane(mesh,newPosition,flight.heading)
 }
 }else{
-const newMesh = this.createAircraftMesh()
+
+  //Adding not existing plane
+  const userData = {icao24: flight.icao24}
+const newMesh = this.createAircraftMesh(userData)
 newMesh.position.copy(newPosition)
 this.orientPlane(newMesh,newPosition,flight.heading)
 
@@ -132,25 +165,33 @@ private disposeGroup(group :THREE.Group){
 }
 
 addLights(): void {
-  const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
-  const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+  const directionalLight = new THREE.DirectionalLight(0xffffff, 1.5);
+  const ambientLight = new THREE.AmbientLight(0xffffff, 2);
 
-  directionalLight.position.set(5, 10, 7.5);
-  this.scene.add(directionalLight);
+  directionalLight.position.set(20, 10, 20);
+  //this.scene.add(directionalLight);
   this.scene.add(ambientLight);
 
 }
 
 
- animate(): void {
+animate(): void {
     requestAnimationFrame(() => this.animate());
 
+    if(this.clouds){
+
+      this.clouds.rotateY(0.00001);
+    }
     this.orbitControls.update();
-    this.renderer.render(this.scene, this.camera);
+
+    //If we are using composer, we are rendering scene through it
+    this.composer.render()
+    //we are not using renderer.render now
+    //this.renderer.render(this.scene, this.camera);
   }
 
 
-  onWindowResize(canvasRef: HTMLCanvasElement): void {
+onWindowResize(canvasRef: HTMLCanvasElement): void {
     this.camera.aspect =
       canvasRef.clientWidth / canvasRef.clientHeight;
     this.camera.updateProjectionMatrix();
@@ -160,34 +201,62 @@ addLights(): void {
     );
   }
 
+createClouds(){
+  const textureLoader = new THREE.TextureLoader()
 
-  createEarth() {
+  const geometry = new THREE.SphereGeometry(5.1,64,64)
+
+  const cloudMaterial = new THREE.MeshLambertMaterial({
+  color: 0xffffff, 
+  alphaMap: textureLoader.load('textures/clouds.jpg'), 
+  opacity: 1,
+  transparent: true,
+  depthWrite: false ,
+  blending: THREE.NormalBlending,
+  side: THREE.DoubleSide
+})
+
+this.clouds = new THREE.Mesh(geometry,cloudMaterial),
+this.scene.add(this.clouds)
+}
+
+
+createEarth() {
     const loader = new THREE.TextureLoader();
     
     // loading earth texture (color map)
-    const earthTexture = loader.load('https://unpkg.com/three-globe/example/img/earth-blue-marble.jpg');
+    const earthTexture = loader.load('textures/earth.jpg');
   
     // loading earth texture(bump map)
-    const bumpTexture = loader.load('https://unpkg.com/three-globe/example/img/earth-topology.png');
-  
+    const bumpTexture = loader.load('textures/earth-bump.jpg');
+    //loading earth at night - in material set as emissive map
+    const earthNightTexture = loader.load('textures/earth-night.jpg')
+
     const geometry = new THREE.SphereGeometry(5, 64, 64);
     
-    const material = new THREE.MeshPhongMaterial({
+    const material = new THREE.MeshStandardMaterial({
       map: earthTexture,          // main texture
       bumpMap: bumpTexture,      // bump map
       bumpScale: 0.8,           // bump scale
-      specular: new THREE.Color('grey'), // specular
-      shininess: 5               // shininess
+      roughness: 0.8
+ 
     });
-  
+    
+    const nightEmissiveMaterial = new THREE.MeshStandardMaterial({
+      map:earthTexture,
+      emissiveMap: earthNightTexture,
+      emissive: new THREE.Color(0xffff88), // Kolor świateł miast
+      emissiveIntensity: 0.5
+    })
+
     this.earth = new THREE.Mesh(geometry, material);
     this.scene.add(this.earth);
   }
 
 
-  placeGeometryOnGlobe(lat:number, lon :number){
+placeGeometryOnGlobe(lat:number, lon :number){
 
-    const cube = this.createAircraftMesh()
+    const cube = this.createAircraftMesh({icao24:"X-Jet BlackBird"})
     const radius = 5;
     const phi = (90 - lat) * (Math.PI / 180);
     const theta = (lon + 180) * (Math.PI / 180);
@@ -198,12 +267,13 @@ addLights(): void {
     cube.lookAt(new THREE.Vector3(0,0,0))
     cube.rotateX(-Math.PI/2)
     this.scene.add(cube);
+    this.aircraftsMap.set( 'N/A',cube)
   }
 
 
 
   //AI generated
-  private createAircraftMesh(): THREE.Group {
+private createAircraftMesh(userData:Object): THREE.Group {
   const aircraftGroup = new THREE.Group();
 
   // Plane parts material
@@ -249,7 +319,7 @@ addLights(): void {
 
   //scale
   aircraftGroup.scale.set(0.15, 0.15, 0.15);
-
+  aircraftGroup.userData = userData;
   return aircraftGroup;
 }
 
@@ -269,4 +339,71 @@ private calcVector3(lat: number, lon: number, radius: number = 5): THREE.Vector3
 
   return new THREE.Vector3(x, y, z);
 }
+
+onClickedObject(e:PointerEvent, canvas : HTMLCanvasElement) {
+
+  let boundaries = canvas.getBoundingClientRect();
+  
+  let windowWidth = canvas.clientWidth;
+  let windowHeight = canvas.clientHeight
+  
+  
+
+  
+ 
+  console.log(this.outlinePass.selectedObjects);
+  
+this.configureOutlinePass()
+
+let normal_x = ((e.clientX - boundaries.left)/windowWidth) *2 -1
+let normal_y = -((e.clientY - boundaries.top)/windowHeight) *2 +1
+console.log('normals: ', normal_x, normal_y  );
+
+
+this.clickedVector = new THREE.Vector2(normal_x , normal_y)
+
+this.raycaster.setFromCamera(this.clickedVector, this.camera)
+
+const aircrafts = [...this.aircraftsMap.values()]
+
+const objects = this.raycaster.intersectObjects(aircrafts,true)
+
+if(objects.length>0){
+
+const aircraftObject = objects[0].object.parent
+this.outlinePass.selectedObjects = [];
+if(aircraftObject){
+this.outlinePass.selectedObjects = [aircraftObject]
+
+}
+const clickedAircraft :string= aircraftObject?.userData["icao24"]
+if(clickedAircraft){
+  console.log(clickedAircraft);
+  this.flightService.$globalFlightsSubject.pipe(map((globalData)=>{
+    const flight = globalData?.flights.find((flight)=>{ if(flight.icao24 == clickedAircraft){return 1}else{return 0}})
+    return flight}
+  )
+).subscribe((flight)=>{
+    console.log(flight);  this.outlinePass.selectedObjects = [];
+    if(flight){
+      this.flightService.detailsOfFlightSignal.set(flight)
+    }
+  })
+  
+}
+
+}
+
+}
+
+configureOutlinePass(){
+  if(this.outlinePass){
+    this.outlinePass.edgeStrength = 5.0;      // emission strength
+    this.outlinePass.edgeGlow = 1.0;          // glow strength
+    this.outlinePass.edgeThickness = 2.0;     // edge thickness
+    this.outlinePass.visibleEdgeColor.set('#5500ff'); // edge colors
+   // this.outlinePass.hiddenEdgeColor.set('#00330000');  // edge color when plane is on other side
+  
+}}
+
 }
