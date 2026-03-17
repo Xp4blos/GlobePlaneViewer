@@ -29,9 +29,11 @@ GlobePlaneViewer is an interactive, web-based 3D application designed to monitor
     EffectComposer: Utilized for advanced post-processing effects like OutlinePass.
 
 📸 Preview (Conceptual)
+Observe hundreds of flights moving across continents.
 
-    Global View: Observe hundreds of flights moving across continents.
-<img width="3727" height="1683" alt="globe planes" src="https://github.com/user-attachments/assets/943d1cf2-269f-44a1-bf96-0067ad32bd72" />
+Global View: <img width="1836" height="853" alt="low-q-img-readme" src="https://github.com/user-attachments/assets/f1485cdf-abd3-4fb3-9d25-9a3227ec8ec1" />
+
+<img width="1658" height="1033" alt="2" src="https://github.com/user-attachments/assets/e332982e-a18b-47da-afbf-b24dc473c2ff" />
 
 
 
